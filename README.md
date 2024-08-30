@@ -1,3 +1,3 @@
-# Deppressed MQ
+# depressed_mq
 
 It was created for the sake of creation...
