@@ -1,4 +1,4 @@
-mod message;
+mod core;
 mod partition;
 
 use std::{
@@ -37,11 +37,9 @@ fn generate_random_vec() -> Vec<u8> {
         duration.as_secs() as usize % 101
     };
     let mut vec = vec![0u8; size];
-    fill_random_bytes(&mut vec);
-    vec
-}
 
-fn fill_random_bytes(buf: &mut [u8]) {
     let mut file = File::open("/dev/urandom").expect("Failed to open /dev/urandom");
-    file.read_exact(buf).expect("Failed to read random bytes");
+    file.read_exact(&mut vec)
+        .expect("Failed to read random bytes");
+    vec
 }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::message::{Message, RawData};
+use crate::core::message::{Message, RawData};
 
 const SEGMENT_CAPACITY: usize = 1000;
 
