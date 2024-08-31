@@ -1,5 +1,6 @@
 mod core;
 mod partition;
+mod storage;
 
 use std::{
     fs::File,
