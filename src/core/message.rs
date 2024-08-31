@@ -1,6 +1,7 @@
 use core::fmt;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub type RawData = Vec<u8>;
 
@@ -15,7 +16,6 @@ pub struct Message {
     // TODO: maybe add:
     // - attributes(HashMap<String, String>)
     // - headers(Vec<String>
-    //
     // They are used in kafka, but idk how to use them here
 }
 
@@ -46,5 +46,58 @@ impl fmt::Display for Message {
             None => write!(f, "[Key NONE]"),
         }?;
         write!(f, "[Data {:?}]", self.value)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerializedMessage {
+    pub offset: usize,
+    pub size: usize,
+    pub timestamp: i64,
+
+    pub key: Option<RawData>,
+    pub value: RawData,
+}
+
+impl From<Message> for SerializedMessage {
+    fn from(value: Message) -> Self {
+        Self {
+            offset: value.offset,
+            size: value.size,
+            timestamp: value.timestamp.timestamp_nanos_opt().unwrap(),
+            key: value.key,
+            value: value.value,
+        }
+    }
+}
+
+impl Into<Message> for SerializedMessage {
+    fn into(self) -> Message {
+        Message {
+            offset: self.offset,
+            size: self.size,
+            timestamp: Utc.timestamp_nanos(self.timestamp),
+            key: self.key,
+            value: self.value,
+        }
+    }
+}
+
+impl Serialize for Message {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        SerializedMessage::from(self.clone()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Message {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let serialized: SerializedMessage = Deserialize::deserialize(deserializer)?;
+        Ok(serialized.into())
     }
 }
