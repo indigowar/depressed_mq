@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     fs::File,
     io::Read,
     time::{SystemTime, UNIX_EPOCH},
@@ -14,6 +14,7 @@ pub type RawData = Vec<u8>;
 
 pub type Headers = HashMap<String, String>;
 
+#[derive(Debug, Default, Clone)]
 pub struct Message {
     pub offset: usize,
     pub size: usize,
@@ -56,23 +57,102 @@ impl fmt::Display for Message {
     }
 }
 
+const SEGMENT_CAPACITY: usize = 1000;
+
+pub struct MemorySegment {
+    start: usize, // starting offset
+    end: usize,   // ending offset
+
+    pub data: Vec<Message>,
+}
+
+impl MemorySegment {
+    pub fn new(start: usize) -> Self {
+        Self {
+            start,
+            end: start + SEGMENT_CAPACITY,
+            data: Vec::with_capacity(SEGMENT_CAPACITY),
+        }
+    }
+
+    pub fn start_offset(&self) -> usize {
+        self.start
+    }
+
+    pub fn end_offset(&self) -> usize {
+        self.end
+    }
+
+    pub fn read(&self, offset: usize) -> Option<Message> {
+        if offset < self.start {
+            return None;
+        }
+
+        let index = offset - self.start;
+        self.data.get(index).cloned()
+    }
+
+    pub fn write(&mut self, msg: Message) -> Option<usize> {
+        if msg.offset < self.start || msg.offset > self.end {
+            return None;
+        }
+
+        self.data.push(msg.clone());
+
+        Some(msg.offset)
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+
 pub struct Partition {
-    queue: VecDeque<Message>,
+    segments: Vec<MemorySegment>,
+    size: usize,
 }
 
 impl Partition {
     pub fn new() -> Self {
         Self {
-            queue: VecDeque::new(),
+            segments: vec![MemorySegment::new(0)],
+            size: 0,
         }
     }
 
-    pub fn publish(&mut self, args: MessageCreationArguments) {
-        let offset = match self.queue.back() {
-            Some(m) => m.offset + 1,
-            None => 0,
-        };
-        self.queue.push_back(Message::new(offset, args))
+    pub fn write(&mut self, args: MessageCreationArguments) -> Result<(), String> {
+        match self.segments.last_mut() {
+            Some(s) => {
+                if s.len() == SEGMENT_CAPACITY {
+                    self.segments.push(MemorySegment::new(0));
+                    return self.write(args);
+                }
+
+                let latest = self.size;
+                self.size += 1;
+                match s.write(Message::new(latest, args)) {
+                    Some(_) => Ok(()),
+                    None => Err("failed to write".into()),
+                }
+            }
+            None => {
+                self.segments.push(MemorySegment::new(0));
+                self.write(args)
+            }
+        }
+    }
+
+    pub fn read(&self, offset: usize) -> Result<Message, String> {
+        for segment in &self.segments {
+            if offset >= segment.start_offset() && offset < segment.end_offset() {
+                if let Some(message) = segment.read(offset) {
+                    return Ok(message);
+                } else {
+                    return Err(format!("Message not found at offset {}", offset));
+                }
+            }
+        }
+        Err(format!("Offset {} out of bounds", offset))
     }
 }
 
@@ -100,16 +180,20 @@ fn main() {
     let mut p = Partition::new();
 
     for _ in 0..10 {
-        p.publish(MessageCreationArguments {
+        p.write(MessageCreationArguments {
             attrs: vec![],
             headers: HashMap::new(),
             timestamp: Utc::now(),
             key: None,
             value: generate_random_vec(),
         })
+        .unwrap();
     }
 
-    for msg in p.queue {
-        println!("{}", msg);
+    for i in 0..10 {
+        match p.read(i) {
+            Ok(msg) => println!("{}", msg),
+            Err(e) => println!("{}", e),
+        }
     }
 }
