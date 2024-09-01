@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf};
+use std::io;
 
 use chrono::{DateTime, Utc};
 
@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 pub struct TimestampIndex {}
 
 impl TimestampIndex {
-    pub fn new(_path: PathBuf) -> Self {
+    pub fn new(_path: String) -> Result<Self, io::Error> {
         todo!()
     }
 

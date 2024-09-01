@@ -1,2 +1,5 @@
-pub mod offset_index;
-pub mod timestamp_index;
+pub mod partition;
+
+mod offset_index;
+mod segment;
+mod timestamp_index;
