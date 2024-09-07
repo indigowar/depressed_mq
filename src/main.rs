@@ -27,6 +27,13 @@ fn main() {
             Err(e) => println!("{}", e),
         }
     }
+
+    let p1 = storage::partition::Partition::new("./test".into(), 0, 100).unwrap();
+    println!("{}", p1);
+    let p2 = storage::partition::Partition::new("./test".into(), 1, 100).unwrap();
+    println!("{}", p2);
+    let p3 = storage::partition::Partition::new("./test".into(), 2, 100).unwrap();
+    println!("{}", p3);
 }
 
 fn generate_random_vec() -> Vec<u8> {
