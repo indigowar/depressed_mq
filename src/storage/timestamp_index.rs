@@ -1,10 +1,11 @@
 use std::{
     cell::RefCell,
-    fs::{File, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{Error, ErrorKind, Read, Seek, SeekFrom, Write},
+    os::unix::fs::MetadataExt,
 };
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 pub struct TimestampIndex {
@@ -28,9 +29,20 @@ impl TimestampIndex {
         }
     }
 
-    pub fn read(&self, _timestamp: DateTime<Utc>) -> Result<usize, Error> {
-        let timestamp = _timestamp.timestamp_nanos_opt().unwrap();
+    pub fn write(&self, timestamp: DateTime<Utc>, offset: usize) -> Result<(), Error> {
+        let data = Index::serialize(Index {
+            offset,
+            timestamp: timestamp.timestamp_nanos_opt().unwrap(),
+        })?;
 
+        let mut file = self.file.borrow_mut();
+
+        file.seek(SeekFrom::End(0))?;
+        file.write_all(&data)
+    }
+
+    pub fn read(&self, timestamp: DateTime<Utc>) -> Result<usize, Error> {
+        let timestamp = timestamp.timestamp_nanos_opt().unwrap();
         let mut buffer = vec![0u8; Index::size()];
 
         self.file.borrow_mut().seek(SeekFrom::Start(0))?;
@@ -42,19 +54,24 @@ impl TimestampIndex {
         }
     }
 
-    pub fn write(&self, timestamp: DateTime<Utc>, offset: usize) -> Result<(), Error> {
-        let data = Index::serialize(Index::new(timestamp, offset))?;
+    pub fn latest_timestamp(&self) -> Result<DateTime<Utc>, Error> {
+        let offset = -(Index::size() as i64);
 
-        let mut file = self.file.borrow_mut();
+        self.file.borrow_mut().seek(SeekFrom::End(offset))?;
+        let index = self.read_index(None)?;
 
-        file.seek(SeekFrom::End(0))?;
-        file.write_all(&data)
+        Ok(Utc.timestamp_nanos(index.timestamp))
+    }
+
+    pub fn size(&self) -> Result<usize, Error> {
+        let file_size = fs::metadata(self.path.clone())?.size() as usize;
+        Ok(file_size / Index::size())
     }
 
     fn read_index(&self, buffer: Option<&mut [u8]>) -> Result<Index, Error> {
         let mut owned_buffer;
         let buffer = match buffer {
-            Some(buf) => buf,
+            Some(b) => b,
             None => {
                 owned_buffer = vec![0u8; Index::size()];
                 owned_buffer.as_mut_slice()
@@ -80,25 +97,17 @@ struct Index {
 }
 
 impl Index {
-    pub fn new(ts: DateTime<Utc>, offset: usize) -> Index {
-        Index {
-            offset,
-            timestamp: ts.timestamp_nanos_opt().unwrap(),
-        }
-    }
-
     pub fn size() -> usize {
-        let index = Index::default();
-
-        bincode::serialize(&index).unwrap().len()
+        let object = Self::default();
+        bincode::serialize(&object).unwrap().len()
     }
 
     pub fn deserialize(buffer: &[u8]) -> Result<Self, Error> {
         bincode::deserialize(buffer).map_err(Self::error)
     }
 
-    pub fn serialize(index: Index) -> Result<Vec<u8>, Error> {
-        bincode::serialize(&index).map_err(Self::error)
+    pub fn serialize(object: Self) -> Result<Vec<u8>, Error> {
+        bincode::serialize(&object).map_err(Self::error)
     }
 
     fn error(e: bincode::Error) -> Error {

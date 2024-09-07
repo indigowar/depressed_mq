@@ -58,14 +58,9 @@ impl OffsetIndex {
         Ok(index.logical)
     }
 
-    pub fn is_empty(&self) -> Result<bool, Error> {
-        Ok(fs::metadata(self.path.clone())?.size() == 0)
-    }
-
-    pub fn is_full(&self, size: usize) -> Result<bool, Error> {
-        let m = fs::metadata(self.path.clone())?;
-        let size = size * Index::size();
-        Ok(m.size() == size as u64)
+    pub fn size(&self) -> Result<usize, Error> {
+        let file_size = fs::metadata(self.path.clone())?.size() as usize;
+        Ok(file_size / Index::size())
     }
 
     pub fn read_index(&self, buffer: Option<&mut [u8]>) -> Result<Index, Error> {
