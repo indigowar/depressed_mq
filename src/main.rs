@@ -10,30 +10,23 @@ use std::{
 
 use chrono::Utc;
 
-use partition::Partition;
-
 fn main() {
     println!("Hello, world!");
 
-    let mut p = Partition::new();
+    let mut p1 = storage::partition::Partition::new("./test".into(), 0, 5).unwrap();
+    println!("{} is loaded", p1);
 
     for _ in 0..10 {
-        p.write(Utc::now(), None, generate_random_vec()).unwrap();
+        p1.write(Utc::now(), None, generate_random_vec()).unwrap();
     }
+    println!("{}", p1);
 
     for i in 0..10 {
-        match p.read(i) {
+        match p1.read(i) {
             Ok(msg) => println!("{}", msg),
-            Err(e) => println!("{}", e),
+            Err(e) => println!("ERROR: {}", e),
         }
     }
-
-    let p1 = storage::partition::Partition::new("./test".into(), 0, 100).unwrap();
-    println!("{}", p1);
-    let p2 = storage::partition::Partition::new("./test".into(), 1, 100).unwrap();
-    println!("{}", p2);
-    let p3 = storage::partition::Partition::new("./test".into(), 2, 100).unwrap();
-    println!("{}", p3);
 }
 
 fn generate_random_vec() -> Vec<u8> {

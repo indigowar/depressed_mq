@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{
     fs,
-    io::Error,
+    io::{Error, ErrorKind},
     path::Path,
     sync::{Arc, Mutex, RwLock},
 };
@@ -37,15 +37,52 @@ impl Partition {
 
     pub fn write(
         &mut self,
-        _timestamp: DateTime<Utc>,
-        _key: Option<RawData>,
-        _value: RawData,
+        timestamp: DateTime<Utc>,
+        key: Option<RawData>,
+        value: RawData,
     ) -> Result<(), Error> {
-        todo!()
+        let mut segments = self.segments.write().unwrap();
+
+        let message = Message::new(self.next_offset, timestamp, key, value);
+        self.next_offset += 1;
+
+        if let Some(segment) = segments.last_mut() {
+            let mut segment = segment.lock().unwrap();
+            if segment.size()? < self.segment_size {
+                println!("Existing segment :{}", segment);
+                return segment.write(message);
+            }
+        }
+
+        let mut segment = Segment::new(
+            self.path.clone(),
+            segments.len() as i32,
+            Self::segment_size(segments.len(), self.segment_size),
+        )?;
+
+        segment.write(message)?;
+
+        segments.push(Arc::new(Mutex::new(segment)));
+
+        Ok(())
     }
 
-    pub fn read(&self, _offset: usize) -> Result<Message, Error> {
-        todo!()
+    pub fn read(&self, offset: usize) -> Result<Message, Error> {
+        let segments = self.segments.read().unwrap();
+
+        for s in segments.iter() {
+            let s = s.clone();
+            let s = s.lock().unwrap();
+
+            if s.belongs_to_segment(offset) {
+                return s.read(offset);
+            }
+        }
+
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            "no message with this offset",
+        ))
     }
 
     fn init(path: String, number: usize, segment_size: usize) -> Result<Self, Error> {
@@ -77,7 +114,9 @@ impl Partition {
             segments.push(s);
         }
 
-        let next_offset = segments.last().unwrap().size().unwrap_or_default();
+        // next_offset is calculated by the size of the last segment + the sizes of all previous
+        // segments, which are always equal to segment_size
+        let next_offset = segment_size * (segments.len() - 1) + segments.last().unwrap().size()?;
 
         let segments = segments
             .into_iter()
@@ -102,8 +141,12 @@ impl fmt::Display for Partition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[Partition #{}, P: `{}`, SS: {:?}, NO: {}]",
-            self.number, &self.path, self.segment_size, self.next_offset,
+            "[Partition #{}, P: `{}`, SS: {:?}, NO: {}, SegLen: {}]",
+            self.number,
+            &self.path,
+            self.segment_size,
+            self.next_offset,
+            self.segments.read().unwrap().len(),
         )
     }
 }

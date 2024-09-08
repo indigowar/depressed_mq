@@ -1,5 +1,6 @@
 use core::fmt;
 use std::{
+    borrow::BorrowMut,
     cell::RefCell,
     fs::{self, File, OpenOptions},
     io::{Error, ErrorKind, Read, Seek, SeekFrom, Write},
@@ -70,13 +71,13 @@ impl Segment {
         self.offset_range_guard(offset)?;
 
         let physical_offset = self.offset_index.read(offset)?;
+        self.log
+            .borrow_mut()
+            .seek(SeekFrom::Start(physical_offset as u64))?;
 
         let header = self.read_header(None)?;
         let mut buffer = vec![0u8; header.size];
-
-        self.log
-            .borrow_mut()
-            .read_exact_at(&mut buffer, physical_offset as u64)?;
+        self.log.borrow_mut().read(&mut buffer)?;
 
         Self::deserialize_message(&buffer)
     }
@@ -100,6 +101,10 @@ impl Segment {
         Ok(offset_size)
     }
 
+    pub fn belongs_to_segment(&self, offset: usize) -> bool {
+        offset >= self.range.0 && offset < self.range.1
+    }
+
     fn offset_range_guard(&self, offset: usize) -> Result<(), Error> {
         if offset >= self.range.0 && offset < self.range.1 {
             return Ok(());
@@ -107,7 +112,10 @@ impl Segment {
 
         Err(Error::new(
             ErrorKind::InvalidInput,
-            "given offset does not belong to this segment",
+            format!(
+                "given offset({}) does not belong to this segment{:?}",
+                offset, self.range
+            ),
         ))
     }
 
