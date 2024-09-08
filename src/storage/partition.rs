@@ -44,13 +44,15 @@ impl Partition {
         let mut segments = self.segments.write().unwrap();
 
         let message = Message::new(self.next_offset, timestamp, key, value);
-        self.next_offset += 1;
 
         if let Some(segment) = segments.last_mut() {
             let mut segment = segment.lock().unwrap();
             if segment.size()? < self.segment_size {
                 println!("Existing segment :{}", segment);
-                return segment.write(message);
+
+                segment.write(message)?;
+                self.next_offset += 1;
+                return Ok(());
             }
         }
 
@@ -64,6 +66,7 @@ impl Partition {
 
         segments.push(Arc::new(Mutex::new(segment)));
 
+        self.next_offset += 1;
         Ok(())
     }
 
