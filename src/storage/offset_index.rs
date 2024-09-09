@@ -49,21 +49,12 @@ impl OffsetIndex {
         }
     }
 
-    pub fn latest_logical(&self) -> Result<usize, Error> {
-        let offset = -(Index::size() as i64);
-
-        self.file.borrow_mut().seek(SeekFrom::End(offset))?;
-        let index = self.read_index(None)?;
-
-        Ok(index.logical)
-    }
-
     pub fn size(&self) -> Result<usize, Error> {
         let file_size = fs::metadata(self.path.clone())?.size() as usize;
         Ok(file_size / Index::size())
     }
 
-    pub fn read_index(&self, buffer: Option<&mut [u8]>) -> Result<Index, Error> {
+    fn read_index(&self, buffer: Option<&mut [u8]>) -> Result<Index, Error> {
         let mut owned_buffer;
         let buffer = match buffer {
             Some(buf) => buf,

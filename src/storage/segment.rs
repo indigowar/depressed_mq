@@ -1,10 +1,9 @@
 use core::fmt;
 use std::{
-    borrow::BorrowMut,
     cell::RefCell,
     fs::{self, File, OpenOptions},
     io::{Error, ErrorKind, Read, Seek, SeekFrom, Write},
-    os::unix::fs::{FileExt, MetadataExt},
+    os::unix::fs::MetadataExt,
 };
 
 use chrono::{DateTime, Utc};
