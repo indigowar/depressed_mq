@@ -1,3 +1,4 @@
+mod bus;
 mod core;
 mod storage;
 
@@ -9,7 +10,8 @@ use std::{
 
 use chrono::Utc;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("Hello, world!");
 
     let mut p1 = storage::partition::Partition::new("./test".into(), 0, 5).unwrap();
